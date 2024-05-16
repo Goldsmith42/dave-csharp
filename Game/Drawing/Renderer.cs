@@ -26,6 +26,7 @@ namespace DaveCsharp.Game.Drawing
 
 
         public void RenderTexture(nint tile, SDL.SDL_Rect dest) => _ = SDL.SDL_RenderCopy(renderer, tile, 0, ref dest);
+        public void RenderTexture(nint tile, SDL.SDL_Rect dest, SDL.SDL_Rect src) => _ = SDL.SDL_RenderCopy(renderer, tile, ref src, ref dest);
 
         public void RenderColor(Color color, SDL.SDL_Rect dest)
         {

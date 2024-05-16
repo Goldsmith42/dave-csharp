@@ -6,6 +6,24 @@ namespace DaveCsharp.Game
 {
     class Game
     {
+        private abstract class TileGetter(Game g)
+        {
+            protected Game Game { get; } = g;
+
+            protected abstract byte GetTileIndex(byte x, byte y);
+            public TileType GetTile(byte x, byte y) => (TileType)GetTileIndex(x, y);
+        }
+
+        private class GameplayTileGetter(Game g) : TileGetter(g)
+        {
+            protected override byte GetTileIndex(byte x, byte y) => Game.GetGridTile(x, y);
+        }
+
+        private class TitleTileGetter(Game g) : TileGetter(g)
+        {
+            protected override byte GetTileIndex(byte x, byte y) => Game.game.GetTitleLevelTile(x, y);
+        }
+
         private GameState game = new();
 
         public void Init()
@@ -89,39 +107,59 @@ namespace DaveCsharp.Game
         private byte GetGridTile(Point<byte> grid) => GetGridTile(grid.X, grid.Y);
         private byte GetGridTile(byte x, byte y) => game.SelectedLevel.Tiles[GetTileIndex(x, y)];
 
+        private void DrawMap(
+            Renderer renderer,
+            GameAssets assets,
+            TileGetter tileGetter,
+            Point<byte> numberOfTiles,
+            Point<byte>? tileOffset = null
+        )
+        {
+            tileOffset ??= new(x: 0, y: 0);
+            SDL.SDL_Rect dest = new() { w = Common.TILE_SIZE };
+            for (byte j = 0; j < numberOfTiles.Y; j++)
+            {
+                dest.y = Common.TILE_SIZE + (j + tileOffset.Y) * Common.TILE_SIZE;
+                for (byte i = 0; i < numberOfTiles.X; i++)
+                {
+                    dest.x = (i + tileOffset.X) * Common.TILE_SIZE;
+                    var tileIndex = UpdateFrame(tileGetter.GetTile(i, j), i);
+                    dest.h = Common.TILE_SIZE;
+                    if (j < numberOfTiles.Y - 1)
+                        renderer.RenderTexture(assets.GetTile(tileIndex), dest);
+                    else
+                    {
+                        dest.h = (int)(dest.h / 2.5);
+                        // For the last y, only draw the upper third
+                        renderer.RenderTexture(assets.GetTile(tileIndex), dest, new()
+                        {
+                            x = 0,
+                            y = 0,
+                            h = dest.h,
+                            w = dest.w
+                        });
+                    }
+                }
+            }
+        }
+
         private void DrawWorld(Renderer renderer, GameAssets assets)
         {
-            SDL.SDL_Rect dest = new();
             if (game.Mode == GameMode.Gameplay)
-                for (byte j = 0; j < 10; j++)
-                {
-                    dest.y = Common.TILE_SIZE + (j * Common.TILE_SIZE);
-                    dest.w = Common.TILE_SIZE;
-                    dest.h = Common.TILE_SIZE;
-
-                    for (byte i = 0; i < 20; i++)
-                    {
-                        dest.x = i * Common.TILE_SIZE;
-                        byte tileIndex = GetGridTile((byte)(game.ViewX + i), j);
-                        tileIndex = UpdateFrame((TileType)tileIndex, i);
-                        renderer.RenderTexture(assets.GetTile(tileIndex), dest);
-                    }
-                }
+                DrawMap(
+                    renderer,
+                    assets,
+                    new GameplayTileGetter(this),
+                    new Point<byte>(x: 20, y: 10)
+                );
             else if (game.Mode == GameMode.Title)
-                for (byte j = 0; j < 7; j++)
-                {
-                    dest.y = Common.TILE_SIZE + (j + 3) * Common.TILE_SIZE;
-                    // TODO: For the last y, only draw the upper third
-                    dest.w = Common.TILE_SIZE;
-                    dest.h = Common.TILE_SIZE;
-                    for (byte i = 0; i < 10; i++)
-                    {
-                        dest.x = (i + 5) * Common.TILE_SIZE;
-                        byte tileIndex = game.GetTitleLevelTile(i, j);
-                        tileIndex = UpdateFrame((TileType)tileIndex, i);
-                        renderer.RenderTexture(assets.GetTile(tileIndex), dest);
-                    }
-                }
+                DrawMap(
+                    renderer,
+                    assets,
+                    new TitleTileGetter(this),
+                    new Point<byte>(x: 10, y: 7),
+                    new Point<byte>(x: 5, y: 3)
+                );
         }
 
         private void DrawDave(Renderer renderer, GameAssets assets)
@@ -138,7 +176,7 @@ namespace DaveCsharp.Game
             else
             {
                 if (game.DaveJump || !game.OnGround)
-                    tileIndex = game.LastDir >= Direction.Neutral ? TileType.DaveJumpLeft : TileType.DaveJumpRight;
+                    tileIndex = game.LastDir >= Direction.Neutral ? TileType.DaveJumpRight : TileType.DaveJumpLeft;
                 if (game.DaveClimb)
                     tileIndex = TileType.DaveClimbStart + (game.DaveTick / 5 % 3);
             }
@@ -394,20 +432,20 @@ namespace DaveCsharp.Game
             {
                 case 2:
                     game.SetMonsters(
-                        TileType.MonsterSpider,
+                        TileType.MonsterSpiderStart,
                         new(x: 44, y: 4),
                         new(x: 59, y: 4)
                     );
                     break;
                 case 3:
                     game.SetMonsters(
-                        (TileType)93,
+                        TileType.MonsterPurpleThingStart,
                         [new(x: 32, y: 2)]
                     );
                     break;
                 case 4:
                     game.SetMonsters(
-                        (TileType)97,
+                        TileType.MonsterRedSunStart,
                         new(x: 15, y: 3),
                         new(x: 33, y: 3),
                         new(x: 49, y: 3)
@@ -415,7 +453,7 @@ namespace DaveCsharp.Game
                     break;
                 case 5:
                     game.SetMonsters(
-                        (TileType)101,
+                        TileType.MonsterGreenBarStart,
                         new(x: 10, y: 8),
                         new(x: 28, y: 8),
                         new(x: 45, y: 2),
@@ -424,7 +462,7 @@ namespace DaveCsharp.Game
                     break;
                 case 6:
                     game.SetMonsters(
-                        (TileType)105,
+                        TileType.MonsterGreySaucerStart,
                         new(x: 5, y: 2),
                         new(x: 16, y: 1),
                         new(x: 46, y: 2),
@@ -433,7 +471,7 @@ namespace DaveCsharp.Game
                     break;
                 case 7:
                     game.SetMonsters(
-                        (TileType)109,
+                        TileType.MonsterDoubleMushroomStart,
                         new(x: 53, y: 5),
                         new(x: 72, y: 2),
                         new(x: 84, y: 1)
@@ -441,7 +479,7 @@ namespace DaveCsharp.Game
                     break;
                 case 8:
                     game.SetMonsters(
-                        (TileType)113,
+                        TileType.MonsterGreenCircleStart,
                         new(x: 35, y: 8),
                         new(x: 41, y: 8),
                         new(x: 49, y: 2),
@@ -450,7 +488,7 @@ namespace DaveCsharp.Game
                     break;
                 case 9:
                     game.SetMonsters(
-                        (TileType)117,
+                        TileType.MonsterSilverSpinnerStart,
                         new(x: 45, y: 8),
                         new(x: 51, y: 2),
                         new(x: 65, y: 3),
