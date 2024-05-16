@@ -14,6 +14,8 @@ namespace DaveCsharp.Game
         Right
     }
 
+    enum GameMode { Title, Gameplay }
+
     class Point<T>(T x, T y) where T : INumber<T>
     {
         public T X { get; set; } = x;

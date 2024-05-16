@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace DaveCsharp.Common
 {
     public class BinaryFileReader(string filePath) : IDisposable, IBinaryReader
@@ -24,8 +26,8 @@ namespace DaveCsharp.Common
         {
             if (stream is null) Open();
 
-            var bytes = new byte[4];
-            stream!.ReadExactly(bytes, 0, 4);
+            var bytes = new byte[Size.INT32];
+            stream!.ReadExactly(bytes, 0, Size.INT32);
             return BitConverter.ToUInt32(bytes);
         }
 
@@ -35,6 +37,14 @@ namespace DaveCsharp.Common
             return (byte)stream!.ReadByte();
         }
 
+        public string ReadString(uint maxLength)
+        {
+            if (stream is null) Open();
+
+            var bytes = new byte[maxLength];
+            stream!.ReadExactly(bytes, 0, (int)maxLength);
+            return Encoding.ASCII.GetString(bytes);
+        }
 
         public void Dispose()
         {

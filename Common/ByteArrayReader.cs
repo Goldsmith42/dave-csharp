@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace DaveCsharp.Common
 {
     public class ByteArrayReader(byte[] bytes) : IBinaryReader
@@ -13,8 +15,15 @@ namespace DaveCsharp.Common
 
         public uint ReadDword()
         {
-            var result = BitConverter.ToUInt32(bytes.Skip(offset).Take(4).ToArray());
-            offset += 4;
+            var result = BitConverter.ToUInt32(bytes.Skip(offset).Take(Size.INT32).ToArray());
+            offset += Size.INT32;
+            return result;
+        }
+
+        public string ReadString(uint maxLength)
+        {
+            var result = Encoding.ASCII.GetString(bytes.Skip(offset).Take((int)maxLength).ToArray());
+            offset += (int)maxLength;
             return result;
         }
 

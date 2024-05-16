@@ -26,12 +26,29 @@ namespace DaveCsharp.Game
             _ = SDL.SDL_PollEvent(out SDL.SDL_Event e);
 
             var keyState = SDL.SDL_GetKeyboardState(out int arraySize);
-            if (GetKey(keyState, arraySize, SDL.SDL_Scancode.SDL_SCANCODE_RIGHT)) game.TryRight = true;
-            if (GetKey(keyState, arraySize, SDL.SDL_Scancode.SDL_SCANCODE_LEFT)) game.TryLeft = true;
-            if (GetKey(keyState, arraySize, SDL.SDL_Scancode.SDL_SCANCODE_UP)) game.TryJump = true;
-            if (GetKey(keyState, arraySize, SDL.SDL_Scancode.SDL_SCANCODE_DOWN)) game.TryDown = true;
-            if (GetKey(keyState, arraySize, SDL.SDL_Scancode.SDL_SCANCODE_LCTRL)) game.TryFire = true;
-            if (GetKey(keyState, arraySize, SDL.SDL_Scancode.SDL_SCANCODE_LALT)) game.TryJetpack = true;
+            if (game.Mode == GameMode.Gameplay)
+            {
+                if (GetKey(keyState, arraySize, SDL.SDL_Scancode.SDL_SCANCODE_RIGHT)) game.TryRight = true;
+                if (GetKey(keyState, arraySize, SDL.SDL_Scancode.SDL_SCANCODE_LEFT)) game.TryLeft = true;
+                if (GetKey(keyState, arraySize, SDL.SDL_Scancode.SDL_SCANCODE_UP)) game.TryJump = true;
+                if (GetKey(keyState, arraySize, SDL.SDL_Scancode.SDL_SCANCODE_DOWN)) game.TryDown = true;
+                if (GetKey(keyState, arraySize, SDL.SDL_Scancode.SDL_SCANCODE_LCTRL)) game.TryFire = true;
+                if (GetKey(keyState, arraySize, SDL.SDL_Scancode.SDL_SCANCODE_LALT)) game.TryJetpack = true;
+            }
+            else if (game.Mode == GameMode.Title)
+            {
+                SDL.SDL_Scancode[] keys = [
+                    SDL.SDL_Scancode.SDL_SCANCODE_RETURN,
+                    SDL.SDL_Scancode.SDL_SCANCODE_SPACE,
+                    SDL.SDL_Scancode.SDL_SCANCODE_LCTRL,
+                    SDL.SDL_Scancode.SDL_SCANCODE_LALT
+                ];
+                if (keys.Any(k => GetKey(keyState, arraySize, k)))
+                {
+                    game.Mode = GameMode.Gameplay;
+                    StartLevel();
+                }
+            }
             if (e.type == SDL.SDL_EventType.SDL_QUIT) game.Quit = true;
         }
 
@@ -40,24 +57,28 @@ namespace DaveCsharp.Game
             renderer.Clear();
 
             DrawWorld(renderer, assets);
-            DrawDave(renderer, assets);
-            DrawMonsters(renderer, assets);
-            DrawDaveBullet(renderer, assets);
-            DrawMonsterBullet(renderer, assets);
+            if (game.Mode == GameMode.Gameplay)
+            {
+                DrawDave(renderer, assets);
+                DrawMonsters(renderer, assets);
+                DrawDaveBullet(renderer, assets);
+                DrawMonsterBullet(renderer, assets);
+            }
             DrawUI(renderer, assets);
 
             renderer.RenderScreen();
         }
 
-        private byte UpdateFrame(byte tile, byte salt)
+        private byte UpdateFrame(TileType tile, byte salt)
         {
             byte mod = tile switch
             {
-                6 => 4,
-                10 => 5,
-                25 => 4,
-                36 => 5,
-                129 => 4,
+                TileType.FireStart => 4,
+                TileType.TrophyStart => 5,
+                TileType.WeedStart => 4,
+                TileType.WaterStart => 5,
+                TileType.ExplosionStart => 4,
+                TileType.TitleStart => 4,
                 _ => 1,
             };
             return (byte)(tile + (salt + game.Tick / 5) % mod);
@@ -71,33 +92,49 @@ namespace DaveCsharp.Game
         private void DrawWorld(Renderer renderer, GameAssets assets)
         {
             SDL.SDL_Rect dest = new();
-            for (byte j = 0; j < 10; j++)
-            {
-                dest.y = Common.TILE_SIZE + (j * Common.TILE_SIZE);
-                dest.w = Common.TILE_SIZE;
-                dest.h = Common.TILE_SIZE;
-
-                for (byte i = 0; i < 20; i++)
+            if (game.Mode == GameMode.Gameplay)
+                for (byte j = 0; j < 10; j++)
                 {
-                    dest.x = i * Common.TILE_SIZE;
-                    byte tileIndex = GetGridTile((byte)(game.ViewX + i), j);
-                    tileIndex = UpdateFrame(tileIndex, i);
-                    renderer.RenderTexture(assets.GetTile(tileIndex), dest);
+                    dest.y = Common.TILE_SIZE + (j * Common.TILE_SIZE);
+                    dest.w = Common.TILE_SIZE;
+                    dest.h = Common.TILE_SIZE;
+
+                    for (byte i = 0; i < 20; i++)
+                    {
+                        dest.x = i * Common.TILE_SIZE;
+                        byte tileIndex = GetGridTile((byte)(game.ViewX + i), j);
+                        tileIndex = UpdateFrame((TileType)tileIndex, i);
+                        renderer.RenderTexture(assets.GetTile(tileIndex), dest);
+                    }
                 }
-            }
+            else if (game.Mode == GameMode.Title)
+                for (byte j = 0; j < 7; j++)
+                {
+                    dest.y = Common.TILE_SIZE + (j + 3) * Common.TILE_SIZE;
+                    // TODO: For the last y, only draw the upper third
+                    dest.w = Common.TILE_SIZE;
+                    dest.h = Common.TILE_SIZE;
+                    for (byte i = 0; i < 10; i++)
+                    {
+                        dest.x = (i + 5) * Common.TILE_SIZE;
+                        byte tileIndex = game.GetTitleLevelTile(i, j);
+                        tileIndex = UpdateFrame((TileType)tileIndex, i);
+                        renderer.RenderTexture(assets.GetTile(tileIndex), dest);
+                    }
+                }
         }
 
         private void DrawDave(Renderer renderer, GameAssets assets)
         {
             TileType tileIndex;
-            if (game.LastDir == Direction.Neutral) tileIndex = TileType.DaveNeutral;
+            if (game.LastDir == Direction.Neutral) tileIndex = TileType.DaveDefault;
             else
             {
                 tileIndex = (TileType)(game.LastDir > Direction.Neutral ? 53 : 57);
                 tileIndex += game.DaveTick / 5 % 3;
             }
             if (game.DaveJetpack)
-                tileIndex = game.LastDir >= Direction.Neutral ? TileType.DaveJetpackLeft : TileType.DaveJetpackRight;
+                tileIndex = game.LastDir >= Direction.Neutral ? TileType.JetpackRightStart : TileType.JetpackLeftEnd;
             else
             {
                 if (game.DaveJump || !game.OnGround)
@@ -135,7 +172,7 @@ namespace DaveCsharp.Game
         {
             if (game.DBulletP.IsSet)
                 renderer.RenderTexture(
-                    assets.GetTile(game.DBulletDir > Direction.Neutral ? TileType.DBulletRight : TileType.DBulletLeft),
+                    assets.GetTile(game.DBulletDir > Direction.Neutral ? TileType.DaveBulletLeft : TileType.DaveBulletLeft),
                     new()
                     {
                         x = game.DBulletP.X - game.ViewX * Common.TILE_SIZE,
@@ -150,7 +187,7 @@ namespace DaveCsharp.Game
         {
             if (game.EBulletP.IsSet)
                 renderer.RenderTexture(
-                    assets.GetTile(game.EBulletDir > Direction.Neutral ? TileType.EBulletRight : TileType.EBulletLeft),
+                    assets.GetTile(game.EBulletDir > Direction.Neutral ? TileType.MonsterBulletRight : TileType.MonsterBulletLeft),
                     new()
                     {
                         x = game.EBulletP.X - game.ViewX * Common.TILE_SIZE,
@@ -163,105 +200,118 @@ namespace DaveCsharp.Game
 
         private void DrawUI(Renderer renderer, GameAssets assets)
         {
-            SDL.SDL_Rect dest = new() { x = 0, y = 16, w = 960, h = 1 };
-            Renderer.Color white = new(0xee, 0xee, 0xee, 0xff);
-            renderer.RenderColor(white, dest);
-            dest.y = 176;
-            renderer.RenderColor(white, dest);
-
-            dest.x = 1;
-            dest.y = 2;
-            dest.w = 62;
-            dest.h = 11;
-            renderer.RenderTexture(assets.GetTile(TileType.UIScore), dest);
-
-            dest.x = 120;
-            renderer.RenderTexture(assets.GetTile(TileType.UILevel), dest);
-
-            dest.x = 200;
-            renderer.RenderTexture(assets.GetTile(TileType.UILives), dest);
-
-            dest.x = 64;
-            dest.w = 8;
-            dest.h = 11;
-            renderer.RenderTexture(assets.GetTile((byte)((byte)TileType.UI0 + game.Score / 10000 % 10)), dest);
-
-            dest.x += 8;
-            renderer.RenderTexture(assets.GetTile((byte)((byte)TileType.UI0 + game.Score / 1000 % 10)), dest);
-
-            dest.x += 8;
-            renderer.RenderTexture(assets.GetTile((byte)((byte)TileType.UI0 + game.Score / 100 % 10)), dest);
-
-            dest.x += 8;
-            renderer.RenderTexture(assets.GetTile((byte)((byte)TileType.UI0 + game.Score / 10 % 10)), dest);
-
-            dest.x += 8;
-            renderer.RenderTexture(assets.GetTile(TileType.UI0), dest);
-
-            dest.x = 170;
-            renderer.RenderTexture(assets.GetTile(TileType.UI0 + (game.CurrentLevel + 1) / 10), dest);
-
-            dest.x += 8;
-            renderer.RenderTexture(assets.GetTile(TileType.UI0 + (game.CurrentLevel + 1) % 10), dest);
-
-            for (byte i = 0; i < game.Lives; i++)
+            if (game.Mode == GameMode.Gameplay)
             {
-                dest.x = 255 + Common.TILE_SIZE * i;
-                dest.w = Common.TILE_SIZE;
-                dest.h = 12;
-                renderer.RenderTexture(assets.GetTile(TileType.UILife), dest);
-            }
+                SDL.SDL_Rect dest = new() { x = 0, y = 16, w = 960, h = 1 };
+                Renderer.Color white = new(0xee, 0xee, 0xee, 0xff);
+                renderer.RenderColor(white, dest);
+                dest.y = 176;
+                renderer.RenderColor(white, dest);
 
-            if (game.Trophy)
-            {
-                dest.x = 72;
-                dest.y = 180;
-                dest.w = 176;
-                dest.h = 14;
-                renderer.RenderTexture(assets.GetTile(TileType.UITrophy), dest);
-            }
-
-            if (game.Gun)
-            {
-                dest.x = 255;
-                dest.y = 180;
-                dest.w = 62;
-                dest.h = 11;
-                renderer.RenderTexture(assets.GetTile(TileType.UIGun), dest);
-            }
-
-            if (game.Jetpack != 0)
-            {
                 dest.x = 1;
-                dest.y = 177;
+                dest.y = 2;
                 dest.w = 62;
                 dest.h = 11;
-                renderer.RenderTexture(assets.GetTile(TileType.UIJetpack), dest);
+                renderer.RenderTexture(assets.GetTile(TileType.UIScoreBanner), dest);
 
-                dest.y = 190;
-                dest.h = 8;
-                renderer.RenderTexture(assets.GetTile(TileType.UIJetpackFrame), dest);
+                dest.x = 120;
+                renderer.RenderTexture(assets.GetTile(TileType.UILevelBanner), dest);
 
-                dest.x = 2;
-                dest.y = 192;
-                dest.w = (int)(game.Jetpack * 0.23);
-                dest.h = 4;
-                renderer.RenderColor(new Renderer.Color(0xee, 0, 0, 0xff), dest);
+                dest.x = 200;
+                renderer.RenderTexture(assets.GetTile(TileType.UILivesBanner), dest);
+
+                dest.x = 64;
+                dest.w = 8;
+                dest.h = 11;
+                renderer.RenderTexture(assets.GetTile((byte)((byte)TileType.UI0 + game.Score / 10000 % 10)), dest);
+
+                dest.x += 8;
+                renderer.RenderTexture(assets.GetTile((byte)((byte)TileType.UI0 + game.Score / 1000 % 10)), dest);
+
+                dest.x += 8;
+                renderer.RenderTexture(assets.GetTile((byte)((byte)TileType.UI0 + game.Score / 100 % 10)), dest);
+
+                dest.x += 8;
+                renderer.RenderTexture(assets.GetTile((byte)((byte)TileType.UI0 + game.Score / 10 % 10)), dest);
+
+                dest.x += 8;
+                renderer.RenderTexture(assets.GetTile(TileType.UI0), dest);
+
+                dest.x = 170;
+                renderer.RenderTexture(assets.GetTile(TileType.UI0 + (game.CurrentLevel + 1) / 10), dest);
+
+                dest.x += 8;
+                renderer.RenderTexture(assets.GetTile(TileType.UI0 + (game.CurrentLevel + 1) % 10), dest);
+
+                for (byte i = 0; i < game.Lives; i++)
+                {
+                    dest.x = 255 + Common.TILE_SIZE * i;
+                    dest.w = Common.TILE_SIZE;
+                    dest.h = 12;
+                    renderer.RenderTexture(assets.GetTile(TileType.UIIconLife), dest);
+                }
+
+                if (game.Trophy)
+                {
+                    dest.x = 72;
+                    dest.y = 180;
+                    dest.w = 176;
+                    dest.h = 14;
+                    renderer.RenderTexture(assets.GetTile(TileType.UIMessageTrophy), dest);
+                }
+
+                if (game.Gun)
+                {
+                    dest.x = 255;
+                    dest.y = 180;
+                    dest.w = 62;
+                    dest.h = 11;
+                    renderer.RenderTexture(assets.GetTile(TileType.UIIconGun), dest);
+                }
+
+                if (game.Jetpack != 0)
+                {
+                    dest.x = 1;
+                    dest.y = 177;
+                    dest.w = 62;
+                    dest.h = 11;
+                    renderer.RenderTexture(assets.GetTile(TileType.UIIconJetpack), dest);
+
+                    dest.y = 190;
+                    dest.h = 8;
+                    renderer.RenderTexture(assets.GetTile(TileType.UIBarJetpack), dest);
+
+                    dest.x = 2;
+                    dest.y = 192;
+                    dest.w = (int)(game.Jetpack * 0.23);
+                    dest.h = 4;
+                    renderer.RenderColor(new Renderer.Color(0xee, 0, 0, 0xff), dest);
+                }
             }
+            else if (game.Mode == GameMode.Title)
+            {
+                SDL.SDL_Rect dest = new() { x = 104, w = 112, h = 47 };
+                renderer.RenderTexture(assets.GetTile(UpdateFrame(TileType.TitleStart, 0)), dest);
+
+                // TODO: Draw text
+            };
         }
 
         internal void Update()
         {
-            CheckCollision();
-            PickupItem(game.CheckPickup);
-            UpdateDBullet();
-            UpdateEBullet();
-            VerifyInput();
-            MoveDave();
-            MoveMonsters();
-            FireMonsters();
-            ScrollScreen();
-            ApplyGravity();
+            if (game.Mode == GameMode.Gameplay)
+            {
+                CheckCollision();
+                PickupItem(game.CheckPickup);
+                UpdateDBullet();
+                UpdateEBullet();
+                VerifyInput();
+                MoveDave();
+                MoveMonsters();
+                FireMonsters();
+                ScrollScreen();
+                ApplyGravity();
+            }
             UpdateLevel();
             ClearInput();
         }
@@ -344,7 +394,7 @@ namespace DaveCsharp.Game
             {
                 case 2:
                     game.SetMonsters(
-                        TileType.SpiderStart,
+                        TileType.MonsterSpider,
                         new(x: 44, y: 4),
                         new(x: 59, y: 4)
                     );
@@ -429,17 +479,17 @@ namespace DaveCsharp.Game
 
         private void FireMonsters()
         {
-            // if (game.EBulletP.IsEmpty)
-            //     foreach (var m in game.ActiveMonsters)
-            //         if (IsVisible(m.MonsterP.X) && !m.DeadTimer.IsActive)
-            //         {
-            //             game.EBulletDir = game.DaveP.X < m.MonsterP.X ? Direction.Left : Direction.Right;
-            //             if (game.EBulletDir == Direction.Right)
-            //                 game.EBulletP.X = (ushort)(m.MonsterP.X + 18);
-            //             if (game.EBulletDir == Direction.Left)
-            //                 game.EBulletP.X = (ushort)(m.MonsterP.X - 8);
-            //             game.EBulletP.Y = (ushort)(m.MonsterP.Y + 8);
-            //         }
+            if (game.EBulletP.IsEmpty)
+                foreach (var m in game.ActiveMonsters)
+                    if (IsVisible(m.MonsterP.X) && !m.DeadTimer.IsActive)
+                    {
+                        game.EBulletDir = game.DaveP.X < m.MonsterP.X ? Direction.Left : Direction.Right;
+                        if (game.EBulletDir == Direction.Right)
+                            game.EBulletP.X = (ushort)(m.MonsterP.X + 18);
+                        if (game.EBulletDir == Direction.Left)
+                            game.EBulletP.X = (ushort)(m.MonsterP.X - 8);
+                        game.EBulletP.Y = (ushort)(m.MonsterP.Y + 8);
+                    }
         }
 
         private void ApplyGravity()
@@ -507,37 +557,41 @@ namespace DaveCsharp.Game
                 return true;
             }
 
-            if (type == 1) return false;
-            if (type == 3) return false;
-            if (type == 5) return false;
-            if (type == 15) return false;
-            if (type == 16) return false;
-            if (type == 17) return false;
-            if (type == 18) return false;
-            if (type == 19) return false;
-            if (type == 21) return false;
-            if (type == 22) return false;
-            if (type == 23) return false;
-            if (type == 24) return false;
-            if (type == 29) return false;
-            if (type == 30) return false;
+            switch ((TileType)type)
+            {
+                case TileType.Rock:
+                case TileType.SilverBar:
+                case TileType.BlueBrick:
+                case TileType.PipeHorizontal:
+                case TileType.PipeVertical:
+                case TileType.RedBrick:
+                case TileType.NormalRock:
+                case TileType.BlueWall:
+                case TileType.RockSlope1:
+                case TileType.RockSlope2:
+                case TileType.RockSlope3:
+                case TileType.RockSlope4:
+                case TileType.PurpleBarVertical:
+                case TileType.PurpleBarHorizontal:
+                    return false;
+            }
 
             if (isDave)
-                switch (type)
+                switch ((TileType)type)
                 {
-                    case 2: game.CheckDoor = true; break;
-                    case 4:
-                    case 10:
-                    case 20:
-                    case 47:
-                    case 48:
-                    case 49:
-                    case 50:
-                    case 51:
-                    case 52: game.CheckPickup = new(grid); break;
-                    case 6:
-                    case 25:
-                    case 36:
+                    case TileType.Door: game.CheckDoor = true; break;
+                    case TileType.Jetpack:
+                    case TileType.TrophyStart:
+                    case TileType.Gun:
+                    case TileType.BlueDiamond:
+                    case TileType.PurpleBall:
+                    case TileType.RedDiamond:
+                    case TileType.Crown:
+                    case TileType.Ring:
+                    case TileType.Wand: game.CheckPickup = new(grid); break;
+                    case TileType.FireStart:
+                    case TileType.WeedStart:
+                    case TileType.WaterStart:
                         if (!game.DaveDeadTimer.IsActive) game.DaveDeadTimer.Start();
                         break;
                 }
@@ -690,16 +744,16 @@ namespace DaveCsharp.Game
             switch ((TileType)type)
             {
                 case TileType.Jetpack: game.Jetpack = 0xff; break;
-                case TileType.Trophy:
+                case TileType.TrophyStart:
                     game.AddScore(1000);
                     game.Trophy = true;
                     break;
-                case (TileType)47: game.AddScore(100); break;
-                case (TileType)48: game.AddScore(50); break;
-                case (TileType)49: game.AddScore(150); break;
-                case (TileType)50: game.AddScore(300); break;
-                case (TileType)51: game.AddScore(200); break;
-                case (TileType)52: game.AddScore(500); break;
+                case TileType.BlueDiamond: game.AddScore(100); break;
+                case TileType.PurpleBall: game.AddScore(50); break;
+                case TileType.RedDiamond: game.AddScore(150); break;
+                case TileType.Crown: game.AddScore(300); break;
+                case TileType.Ring: game.AddScore(200); break;
+                case TileType.Wand: game.AddScore(500); break;
                 case TileType.Gun: game.Gun = true; break;
             }
 

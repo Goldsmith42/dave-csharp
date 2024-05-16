@@ -7,6 +7,7 @@ namespace DaveCsharp.Game
         readonly bool[] collisionPoints = new bool[9];
         readonly MonsterState[] monsters = new MonsterState[5];
         readonly DaveLevel[] levels = new DaveLevel[10];
+        readonly byte[] titleLevel = new byte[DaveLevel.TITLE_TILES_SIZE];
 
         public GameState() { }
 
@@ -53,6 +54,9 @@ namespace DaveCsharp.Game
                 for (int i = 0; i < levels[j].Tiles.Length; i++) levels[j].Tiles[i] = reader.ReadByte();
                 for (int i = 0; i < levels[j].Padding.Length; i++) levels[j].Padding[i] = reader.ReadByte();
             }
+
+            using BinaryFileReader titleReader = new(Path.Combine(path, "leveltitle.dat"));
+            for (var i = 0; i < titleLevel.Length; i++) titleLevel[i] = titleReader.ReadByte();
         }
 
         public readonly void SetCollisionPoints(params bool[] values)
@@ -119,6 +123,8 @@ namespace DaveCsharp.Game
         public Point<ushort> EBulletP { get; set; } = Point<ushort>.Default;
         public Direction EBulletDir { get; set; }
 
+        public GameMode Mode { get; set; } = GameMode.Title;
+
         public readonly DaveLevel SelectedLevel => levels[CurrentLevel];
 
         public uint AddScore(ushort newScore)
@@ -127,5 +133,7 @@ namespace DaveCsharp.Game
             Score += newScore;
             return Score;
         }
+
+        public readonly byte GetTitleLevelTile(byte x, byte y) => titleLevel[y * 10 + x];
     }
 }

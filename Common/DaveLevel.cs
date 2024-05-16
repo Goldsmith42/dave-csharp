@@ -2,6 +2,8 @@ namespace DaveCsharp.Common
 {
     readonly struct DaveLevel
     {
+        public const int TITLE_TILES_SIZE = 10 * 7;
+
         public DaveLevel() {}
 
         public byte[] Path { get; } = new byte[256];
