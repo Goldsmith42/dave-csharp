@@ -205,7 +205,7 @@ namespace DaveCsharp.Game
                 SDL.SDL_Rect dest = new() { x = 0, y = 16, w = 960, h = 1 };
                 Renderer.Color white = new(0xee, 0xee, 0xee, 0xff);
                 renderer.RenderColor(white, dest);
-                dest.y = 176;
+                dest.y = 166;
                 renderer.RenderColor(white, dest);
 
                 dest.x = 1;
