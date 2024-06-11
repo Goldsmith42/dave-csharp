@@ -6,24 +6,6 @@ namespace DaveCsharp.Game
 {
     class Game
     {
-        private abstract class TileGetter(Game g)
-        {
-            protected Game Game { get; } = g;
-
-            protected abstract byte GetTileIndex(byte x, byte y);
-            public TileType GetTile(byte x, byte y) => (TileType)GetTileIndex(x, y);
-        }
-
-        private class GameplayTileGetter(Game g) : TileGetter(g)
-        {
-            protected override byte GetTileIndex(byte x, byte y) => Game.GetGridTile(x, y);
-        }
-
-        private class TitleTileGetter(Game g) : TileGetter(g)
-        {
-            protected override byte GetTileIndex(byte x, byte y) => Game.game.GetTitleLevelTile(x, y);
-        }
-
         private GameState game = new();
 
         public void Init()
@@ -87,30 +69,19 @@ namespace DaveCsharp.Game
             renderer.RenderScreen();
         }
 
-        private byte UpdateFrame(TileType tile, byte salt)
-        {
-            byte mod = tile switch
-            {
-                TileType.FireStart => 4,
-                TileType.TrophyStart => 5,
-                TileType.WeedStart => 4,
-                TileType.WaterStart => 5,
-                TileType.ExplosionStart => 4,
-                TileType.TitleStart => 4,
-                _ => 1,
-            };
-            return (byte)(tile + (salt + game.Tick / 5) % mod);
-        }
+        private byte UpdateFrame(Entity tile, byte salt) => (byte)tile.GetFrame(game.Tick, salt);
 
         private static int GetTileIndex(Point<byte> grid) => GetTileIndex(grid.X, grid.Y);
         private static int GetTileIndex(byte x, byte y) => y * 100 + x;
         private byte GetGridTile(Point<byte> grid) => GetGridTile(grid.X, grid.Y);
         private byte GetGridTile(byte x, byte y) => game.SelectedLevel.Tiles[GetTileIndex(x, y)];
+        private Entity GetGridObject(Point<byte> grid) => Entity.GetByType((TileType)GetGridTile(grid));
+        private Entity GetGridObject(byte x, byte y) => Entity.GetByType((TileType)GetGridTile(x, y));
 
         private void DrawMap(
             Renderer renderer,
             GameAssets assets,
-            TileGetter tileGetter,
+            Func<byte, byte, Entity> getTile,
             Point<byte> numberOfTiles,
             Point<byte>? tileOffset = null
         )
@@ -123,7 +94,7 @@ namespace DaveCsharp.Game
                 for (byte i = 0; i < numberOfTiles.X; i++)
                 {
                     dest.x = (i + tileOffset.X) * Common.TILE_SIZE;
-                    var tileIndex = UpdateFrame(tileGetter.GetTile(i, j), i);
+                    var tileIndex = UpdateFrame(getTile(i, j), i);
                     dest.h = Common.TILE_SIZE;
                     if (j < numberOfTiles.Y - 1)
                         renderer.RenderTexture(assets.GetTile(tileIndex), dest);
@@ -149,14 +120,14 @@ namespace DaveCsharp.Game
                 DrawMap(
                     renderer,
                     assets,
-                    new GameplayTileGetter(this),
+                    GetGridObject,
                     new Point<byte>(x: 20, y: 10)
                 );
             else if (game.Mode == GameMode.Title)
                 DrawMap(
                     renderer,
                     assets,
-                    new TitleTileGetter(this),
+                    (x, y) => Entity.GetByType((TileType)game.GetTitleLevelTile(x, y)),
                     new Point<byte>(x: 10, y: 7),
                     new Point<byte>(x: 5, y: 3)
                 );
@@ -164,23 +135,15 @@ namespace DaveCsharp.Game
 
         private void DrawDave(Renderer renderer, GameAssets assets)
         {
-            TileType tileIndex;
-            if (game.LastDir == Direction.Neutral) tileIndex = TileType.DaveDefault;
-            else
-            {
-                tileIndex = (TileType)(game.LastDir > Direction.Neutral ? 53 : 57);
-                tileIndex += game.DaveTick / 5 % 3;
-            }
-            if (game.DaveJetpack)
-                tileIndex = game.LastDir >= Direction.Neutral ? TileType.JetpackRightStart : TileType.JetpackLeftEnd;
-            else
-            {
-                if (game.DaveJump || !game.OnGround)
-                    tileIndex = game.LastDir >= Direction.Neutral ? TileType.DaveJumpRight : TileType.DaveJumpLeft;
-                if (game.DaveClimb)
-                    tileIndex = TileType.DaveClimbStart + (game.DaveTick / 5 % 3);
-            }
-            if (game.DaveDeadTimer.IsActive) tileIndex = TileType.ExplosionStart + (game.Tick / 3 % 4);
+            var tileIndex = game.DaveDeadTimer.IsActive ?
+                Entity.Explosion.GetFrame(game.Tick) :
+                Entity.GetDaveFrame(game.DaveTick, new(
+                    Direction: game.LastDir,
+                    Jetpack: game.DaveJetpack,
+                    Jump: game.DaveJump,
+                    OnGround: game.OnGround,
+                    Climbing: game.DaveClimb
+                ));
             renderer.RenderTexture(assets.GetTile(tileIndex), new()
             {
                 x = game.DaveP.X - game.ViewX * Common.TILE_SIZE,
@@ -194,8 +157,7 @@ namespace DaveCsharp.Game
         {
             foreach (var m in game.ActiveMonsters)
             {
-                var tileIndex = m.DeadTimer.IsActive ? TileType.ExplosionStart : m.Type;
-                tileIndex += game.Tick / 3 % 4;
+                var tileIndex = (m.DeadTimer.IsActive ? Entity.Explosion : m.Type ?? Entity.Empty).GetFrame(game.Tick);
                 renderer.RenderTexture(assets.GetTile(tileIndex), new()
                 {
                     x = m.MonsterP.X - game.ViewX * Common.TILE_SIZE,
@@ -329,7 +291,7 @@ namespace DaveCsharp.Game
             else if (game.Mode == GameMode.Title)
             {
                 SDL.SDL_Rect dest = new() { x = 104, w = 112, h = 47 };
-                renderer.RenderTexture(assets.GetTile(UpdateFrame(TileType.TitleStart, 0)), dest);
+                renderer.RenderTexture(assets.GetTile(UpdateFrame(Entity.Title, 0)), dest);
 
                 // TODO: Draw text
             };
@@ -432,20 +394,20 @@ namespace DaveCsharp.Game
             {
                 case 2:
                     game.SetMonsters(
-                        TileType.MonsterSpiderStart,
+                        Entity.MonsterSpider,
                         new(x: 44, y: 4),
                         new(x: 59, y: 4)
                     );
                     break;
                 case 3:
                     game.SetMonsters(
-                        TileType.MonsterPurpleThingStart,
+                        Entity.MonsterPurpleThing,
                         [new(x: 32, y: 2)]
                     );
                     break;
                 case 4:
                     game.SetMonsters(
-                        TileType.MonsterRedSunStart,
+                        Entity.MonsterRedSun,
                         new(x: 15, y: 3),
                         new(x: 33, y: 3),
                         new(x: 49, y: 3)
@@ -453,7 +415,7 @@ namespace DaveCsharp.Game
                     break;
                 case 5:
                     game.SetMonsters(
-                        TileType.MonsterGreenBarStart,
+                        Entity.MonsterGreenBar,
                         new(x: 10, y: 8),
                         new(x: 28, y: 8),
                         new(x: 45, y: 2),
@@ -462,7 +424,7 @@ namespace DaveCsharp.Game
                     break;
                 case 6:
                     game.SetMonsters(
-                        TileType.MonsterGreySaucerStart,
+                        Entity.MonsterGreySaucer,
                         new(x: 5, y: 2),
                         new(x: 16, y: 1),
                         new(x: 46, y: 2),
@@ -471,7 +433,7 @@ namespace DaveCsharp.Game
                     break;
                 case 7:
                     game.SetMonsters(
-                        TileType.MonsterDoubleMushroomStart,
+                        Entity.MonsterDoubleMushroom,
                         new(x: 53, y: 5),
                         new(x: 72, y: 2),
                         new(x: 84, y: 1)
@@ -479,7 +441,7 @@ namespace DaveCsharp.Game
                     break;
                 case 8:
                     game.SetMonsters(
-                        TileType.MonsterGreenCircleStart,
+                        Entity.MonsterGreenCircle,
                         new(x: 35, y: 8),
                         new(x: 41, y: 8),
                         new(x: 49, y: 2),
@@ -488,7 +450,7 @@ namespace DaveCsharp.Game
                     break;
                 case 9:
                     game.SetMonsters(
-                        TileType.MonsterSilverSpinnerStart,
+                        Entity.MonsterSilverSpinner,
                         new(x: 45, y: 8),
                         new(x: 51, y: 2),
                         new(x: 65, y: 3),
@@ -566,8 +528,8 @@ namespace DaveCsharp.Game
                 x: (byte)((game.DaveP.X + 6) / Common.TILE_SIZE),
                 y: (byte)((game.DaveP.Y + 8) / Common.TILE_SIZE)
             );
-            byte type = grid.X < 100 && grid.Y < 10 ? GetGridTile(grid) : (byte)0;
-            if (type is >= 33 and <= 35 or 41) game.CanClimb = true;
+            var type = grid.X < 100 && grid.Y < 10 ? GetGridObject(grid) : Entity.Empty;
+            if (type.IsClimbable) game.CanClimb = true;
             else
             {
                 game.CanClimb = false;
@@ -585,54 +547,25 @@ namespace DaveCsharp.Game
             );
             if (grid.X > 99 || grid.Y > 9) return true;
 
-            byte type;
+            Entity entity;
             try
             {
-                type = GetGridTile(grid);
+                entity = GetGridObject(grid);
             }
             catch (IndexOutOfRangeException)
             {
                 return true;
             }
 
-            switch ((TileType)type)
-            {
-                case TileType.Rock:
-                case TileType.SilverBar:
-                case TileType.BlueBrick:
-                case TileType.PipeHorizontal:
-                case TileType.PipeVertical:
-                case TileType.RedBrick:
-                case TileType.NormalRock:
-                case TileType.BlueWall:
-                case TileType.RockSlope1:
-                case TileType.RockSlope2:
-                case TileType.RockSlope3:
-                case TileType.RockSlope4:
-                case TileType.PurpleBarVertical:
-                case TileType.PurpleBarHorizontal:
-                    return false;
-            }
+            if (entity.HasCollision) return false;
 
             if (isDave)
-                switch ((TileType)type)
-                {
-                    case TileType.Door: game.CheckDoor = true; break;
-                    case TileType.Jetpack:
-                    case TileType.TrophyStart:
-                    case TileType.Gun:
-                    case TileType.BlueDiamond:
-                    case TileType.PurpleBall:
-                    case TileType.RedDiamond:
-                    case TileType.Crown:
-                    case TileType.Ring:
-                    case TileType.Wand: game.CheckPickup = new(grid); break;
-                    case TileType.FireStart:
-                    case TileType.WeedStart:
-                    case TileType.WaterStart:
-                        if (!game.DaveDeadTimer.IsActive) game.DaveDeadTimer.Start();
-                        break;
-                }
+            {
+                if (entity.Is(Entity.Door)) game.CheckDoor = true;
+                else if (entity.IsPickup) game.CheckPickup = new(grid);
+                else if (entity.IsHazard && !game.DaveDeadTimer.IsActive)
+                    game.DaveDeadTimer.Start();
+            }
 
             return true;
         }
@@ -778,22 +711,11 @@ namespace DaveCsharp.Game
         {
             if (!grid.IsSet) return;
 
-            byte type = GetGridTile(grid);
-            switch ((TileType)type)
-            {
-                case TileType.Jetpack: game.Jetpack = 0xff; break;
-                case TileType.TrophyStart:
-                    game.AddScore(1000);
-                    game.Trophy = true;
-                    break;
-                case TileType.BlueDiamond: game.AddScore(100); break;
-                case TileType.PurpleBall: game.AddScore(50); break;
-                case TileType.RedDiamond: game.AddScore(150); break;
-                case TileType.Crown: game.AddScore(300); break;
-                case TileType.Ring: game.AddScore(200); break;
-                case TileType.Wand: game.AddScore(500); break;
-                case TileType.Gun: game.Gun = true; break;
-            }
+            var entity = GetGridObject(grid);
+            if (entity.HasScoreValue) game.AddScore(entity.ScoreValue);
+            if (entity.Is(Entity.Jetpack)) game.Jetpack = 0xff;
+            else if (entity.Is(Entity.Trophy)) game.Trophy = true;
+            else if (entity.Is(Entity.Gun)) game.Gun = true;
 
             game.SelectedLevel.Tiles[GetTileIndex(grid)] = 0;
             game.CheckPickup.Reset();
@@ -822,7 +744,7 @@ namespace DaveCsharp.Game
                     {
                         game.DBulletP.Reset();
                         monster.DeadTimer.Start();
-                        game.AddScore(300);
+                        game.AddScore(monster.Type?.ScoreValue ?? 0);
                     }
                 }
             }

@@ -65,7 +65,7 @@ namespace DaveCsharp.Game
             for (var i = 0; i < n; i++) collisionPoints[i] = values[i];
         }
 
-        public readonly void SetMonsters(TileType type, params Point<ushort>[] monsterP)
+        public readonly void SetMonsters(Entity type, params Point<ushort>[] monsterP)
         {
             var n = Math.Min(monsterP.Length, monsters.Length);
             for (var i = 0; i < n; i++)

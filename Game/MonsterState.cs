@@ -7,14 +7,14 @@ namespace DaveCsharp.Game
         private byte pathIndex;
         private Point<sbyte> nextP = Point<sbyte>.Default;
 
-        public TileType Type { get; set; } = 0;
+        public Entity? Type { get; set; } = null;
         public DeadTimer DeadTimer { get; set; } = new();
         public Point<byte> Monster { get; set; } = Point<byte>.Default;
         public Point<ushort> MonsterP { get; set; } = Point<ushort>.Default;
 
-        public bool IsActive => Type > 0;
+        public bool IsActive => Type is not null;
 
-        public void Deactivate() => Type = 0;
+        public void Deactivate() => Type = null;
 
         private void ResetPath(byte[] path) => SetPath(path, 0);
         private void SetPath(byte[] path) => SetPath(path, pathIndex);
