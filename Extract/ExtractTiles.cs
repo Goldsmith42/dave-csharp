@@ -1,4 +1,5 @@
 using DaveCsharp.Common;
+using DaveCsharp.Common.Configuration;
 
 namespace DaveCsharp.Extract
 {
@@ -11,9 +12,14 @@ namespace DaveCsharp.Extract
             return result;
         }
 
-        public static void Extract() => Extract(Path.Combine(Environment.CurrentDirectory, "../original-game/DAVE.EXENEW"));
+        public static void Extract(OriginalExeLocation exeLocation) => Extract(exeLocation.Relative ?
+            Path.Combine(Environment.CurrentDirectory, exeLocation.Path) :
+            exeLocation.Path
+        );
         public static void Extract(string exeFilePath)
         {
+            Console.WriteLine("Original executable path is " + exeFilePath);
+
             const uint VGA_DATA_ADDRESS = 0x120f0;
             const uint VGA_PAL_ADDRESS = 0x26b0a;
 

@@ -1,12 +1,16 @@
+using DaveCsharp.Common.Configuration;
 using DaveCsharp.Game.Drawing;
+
 using SDL2;
 
 namespace DaveCsharp.Game
 {
     public static class Main
     {
-        public static void Start()
+        public static void Start(OriginalExeLocation? originalExeLocation)
         {
+            GameAssets.Verify(originalExeLocation);
+
             const byte DISPLAY_SCALE = 3;
             uint timerBegin;
             uint timerEnd;

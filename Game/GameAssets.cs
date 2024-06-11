@@ -1,10 +1,15 @@
+using DaveCsharp.Common.Configuration;
 using DaveCsharp.Game.Drawing;
-using SDL2;
 
 namespace DaveCsharp.Game
 {
     readonly struct GameAssets
     {
+        class MissingConfigurationException : Exception
+        {
+            public MissingConfigurationException() : base("Cannot find configuration required to extract game data") {}
+        }
+
         readonly nint[] graphicsTiles = new nint[158];
 
         public GameAssets() { }
@@ -37,6 +42,32 @@ namespace DaveCsharp.Game
                     surface.SetColorKey(1, 0, 0, 0);
                 graphicsTiles[i] = renderer.LoadTexture(surface);
             }
+        }
+
+        public static void Verify(OriginalExeLocation? originalExeLocation)
+        {
+            if (originalExeLocation is null)
+                Console.WriteLine("Missing original executable location... This can still work if the files were extracted.");
+
+            for (uint i = 0; i <= 157; i++)
+                if (!File.Exists(Path.Combine("assets/tiles", $"tile{i}.bmp")))
+                {
+                    Console.WriteLine("Missing tile file, will extract from executable");
+                    if (originalExeLocation is null)
+                        throw new MissingConfigurationException();
+                    Extract.ExtractTiles.Extract(originalExeLocation);
+                    break;
+                }
+
+            for (uint i = 0; i <= 9; i++)
+                if (!File.Exists(Path.Combine("assets/levels", $"level{i}.dat")))
+                {
+                    Console.WriteLine("Missing level file, will extract from executable");
+                    if (originalExeLocation is null)
+                        throw new MissingConfigurationException();
+                    Extract.ExtractLevels.Extract(originalExeLocation);
+                    break;
+                }
         }
 
         internal readonly nint GetTile(byte tileIndex) => graphicsTiles[tileIndex];

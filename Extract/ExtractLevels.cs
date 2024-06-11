@@ -1,4 +1,6 @@
 using DaveCsharp.Common;
+using DaveCsharp.Common.Configuration;
+
 using SDL2;
 
 namespace DaveCsharp.Extract
@@ -7,9 +9,14 @@ namespace DaveCsharp.Extract
     {
         private const uint LEVEL_ADDR = 0x26e0a;
 
-        public static void Extract() => Extract(Path.Combine(Environment.CurrentDirectory, "../original-game/DAVE.EXENEW"));
+        public static void Extract(OriginalExeLocation exeLocation) => Extract(exeLocation.Relative ?
+            Path.Combine(Environment.CurrentDirectory, exeLocation.Path) :
+            exeLocation.Path
+        );
         public static void Extract(string exeFilePath)
         {
+            Console.WriteLine("Original executable path is " + exeFilePath);
+
             DaveLevel[] levels = new DaveLevel[10];
             var path = "assets/levels/";
             Directory.CreateDirectory(path);
