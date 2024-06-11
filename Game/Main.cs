@@ -23,8 +23,6 @@ namespace DaveCsharp.Game
             Renderer renderer = new(DISPLAY_SCALE);
             assets.Init(renderer);
 
-            game.StartLevel();
-
             while (!game.Quit)
             {
                 timerBegin = SDL.SDL_GetTicks();

@@ -3,9 +3,7 @@
 This is a C# implementation of id Software's classic game, Dangerous Dave, inspired by MaiZure's C implementation and video series: https://github.com/MaiZure/lmdave/
 For the Node.js version, see this repository: https://github.com/Goldsmith42/dave-nodejs
 
-This implementation goes about as far as MaiZure's did, but the end goal is to go further and finish the implementation. This is mostly intended as a programming exercise.
-
-See the `TODO` file for things that are on the roadmap.
+This implementation goes slightly further than MaiZure's did, and the end goal is to go further and finish the implementation. This is mostly intended as a programming exercise.
 
 ## Usage
 

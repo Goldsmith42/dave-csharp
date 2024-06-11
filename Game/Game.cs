@@ -8,6 +8,15 @@ namespace DaveCsharp.Game
     {
         private GameState game = new();
 
+        public static Point<byte> OnGrid(int x, int y) => new(
+            x: (byte)(x / Common.TILE_SIZE),
+            y: (byte)(y / Common.TILE_SIZE)
+        );
+        public static Point<byte> OnGrid(Point<ushort> p) => new(
+            x: (byte)(p.X / Common.TILE_SIZE),
+            y: (byte)(p.Y / Common.TILE_SIZE)
+        );
+
         public void Init()
         {
             game.Init();
@@ -57,12 +66,15 @@ namespace DaveCsharp.Game
             renderer.Clear();
 
             DrawWorld(renderer, assets);
-            if (game.Mode == GameMode.Gameplay)
+            if (game.Mode is GameMode.Gameplay or GameMode.LevelTransition) 
             {
                 DrawDave(renderer, assets);
-                DrawMonsters(renderer, assets);
-                DrawDaveBullet(renderer, assets);
-                DrawMonsterBullet(renderer, assets);
+                if (game.Mode is GameMode.Gameplay)
+                {
+                    DrawMonsters(renderer, assets);
+                    DrawDaveBullet(renderer, assets);
+                    DrawMonsterBullet(renderer, assets);
+                }
             }
             DrawUI(renderer, assets);
 
@@ -77,6 +89,15 @@ namespace DaveCsharp.Game
         private byte GetGridTile(byte x, byte y) => game.SelectedLevel.Tiles[GetTileIndex(x, y)];
         private Entity GetGridObject(Point<byte> grid) => Entity.GetByType((TileType)GetGridTile(grid));
         private Entity GetGridObject(byte x, byte y) => Entity.GetByType((TileType)GetGridTile(x, y));
+        private static Entity GetTransitionGridObject(byte x, byte y)
+        {
+            // The layout of the transition level is always the same and simple, so we can get the tiles on the fly.
+            TileType tileType;
+            if (y is 3 or 5) tileType = TileType.BlueBrick;
+            else if (y == 4 && x == 0) tileType = TileType.Door;
+            else tileType = TileType.Empty;
+            return Entity.GetByType(tileType);
+        }
 
         private void DrawMap(
             Renderer renderer,
@@ -116,20 +137,22 @@ namespace DaveCsharp.Game
 
         private void DrawWorld(Renderer renderer, GameAssets assets)
         {
-            if (game.Mode == GameMode.Gameplay)
-                DrawMap(
-                    renderer,
-                    assets,
-                    (x, y) => GetGridObject((byte)(game.ViewX + x), y),
-                    new Point<byte>(x: 20, y: 10)
-                );
-            else if (game.Mode == GameMode.Title)
+            if (game.Mode == GameMode.Title)
                 DrawMap(
                     renderer,
                     assets,
                     (x, y) => Entity.GetByType(game.GetTitleLevelTile(x, y)),
                     new Point<byte>(x: 10, y: 7),
                     new Point<byte>(x: 5, y: 3)
+                );
+            else
+                DrawMap(
+                    renderer,
+                    assets,
+                    game.Mode == GameMode.LevelTransition ?
+                        (x, y) => GetTransitionGridObject((byte)(game.ViewX + x), y) :
+                        (x, y) => GetGridObject((byte)(game.ViewX + x), y),
+                    new Point<byte>(x: 20, y: 10)
                 );
         }
 
@@ -299,71 +322,93 @@ namespace DaveCsharp.Game
 
         internal void Update()
         {
-            if (game.Mode == GameMode.Gameplay)
+            if (game.Mode is GameMode.Gameplay or GameMode.LevelTransition)
             {
                 CheckCollision();
-                PickupItem(game.CheckPickup);
-                UpdateDBullet();
-                UpdateEBullet();
-                VerifyInput();
+                if (game.Mode is not GameMode.LevelTransition)
+                {
+                    PickupItem(game.CheckPickup);
+                    UpdateDBullet();
+                    UpdateEBullet();
+                    VerifyInput();
+                }
                 MoveDave();
-                MoveMonsters();
-                FireMonsters();
-                ScrollScreen();
-                ApplyGravity();
+                if (game.Mode is GameMode.Gameplay)
+                {
+                    MoveMonsters();
+                    FireMonsters();
+                    ScrollScreen();
+                    ApplyGravity();
+                }
             }
             UpdateLevel();
             ClearInput();
+        }
+
+        private void StartLevelTransition()
+        {
+            game.AddScore(2000);
+            if (game.CurrentLevel < 9)
+            {
+                game.Mode = GameMode.LevelTransition;
+                game.Dave = new(x: 0, y: 4);
+                ResetDave();
+            }
+            else
+            {
+                // TODO: Proper ending
+                Console.WriteLine($"You won the game with {game.Score} points");
+                game.Quit = true;
+            }
         }
 
         private void UpdateLevel()
         {
             game.Tick++;
 
-            if (game.JetpackDelay > 0) game.JetpackDelay--;
-
-            if (game.DaveJetpack)
+            if (game.Mode == GameMode.LevelTransition)
             {
-                game.Jetpack--;
-                if (game.Jetpack == 0) game.DaveJetpack = false;
-            }
-
-            if (game.CheckDoor)
-            {
-                if (game.Trophy)
+                if (game.NextLevel)
                 {
-                    game.AddScore(2000);
-                    if (game.CurrentLevel < 9)
+                    game.NextLevel = false;
+                    game.CurrentLevel++;
+                    StartLevel();
+                }
+            }
+            else
+            {
+                if (game.JetpackDelay > 0) game.JetpackDelay--;
+
+                if (game.DaveJetpack)
+                {
+                    game.Jetpack--;
+                    if (game.Jetpack == 0) game.DaveJetpack = false;
+                }
+
+                if (game.CheckDoor)
+                {
+                    if (game.Trophy) StartLevelTransition();
+                    else game.CheckDoor = false;
+                }
+
+                if (game.DaveDeadTimer.Tick())
+                {
+                    if (game.Lives > 0)
                     {
-                        game.CurrentLevel++;
-                        StartLevel();
+                        game.Lives--;
+                        RestartLevel();
                     }
-                    else
+                    else game.Quit = true;
+                }
+
+                foreach (var monster in game.ActiveMonsters)
+                    if (monster.DeadTimer.Tick()) monster.Deactivate();
+                    else if (!monster.DeadTimer.IsActive && (monster.Monster.X == game.Dave.X) && (monster.Monster.Y == game.Dave.Y))
                     {
-                        Console.WriteLine($"You won with {game.Score} points!");
-                        game.Quit = true;
+                        monster.DeadTimer.Start();
+                        game.DaveDeadTimer.Start();
                     }
-                }
-                else game.CheckDoor = false;
             }
-
-            if (game.DaveDeadTimer.Tick())
-            {
-                if (game.Lives > 0)
-                {
-                    game.Lives--;
-                    RestartLevel();
-                }
-                else game.Quit = true;
-            }
-
-            foreach (var monster in game.ActiveMonsters)
-                if (monster.DeadTimer.Tick()) monster.Deactivate();
-                else if (!monster.DeadTimer.IsActive && (monster.Monster.X == game.Dave.X) && (monster.Monster.Y == game.Dave.Y))
-                {
-                    monster.DeadTimer.Start();
-                    game.DaveDeadTimer.Start();
-                }
         }
 
         public void RestartLevel()
@@ -385,8 +430,26 @@ namespace DaveCsharp.Game
             game.SetDavePosition();
         }
 
+        private void ResetDave()
+        {
+            game.SetDavePosition();
+            game.DaveFire = false;
+            game.DaveJetpack = false;
+            game.DaveDeadTimer = new();
+            game.Trophy = false;
+            game.Gun = false;
+            game.Jetpack = 0;
+            game.CheckDoor = false;
+            game.ViewX = 0;
+            game.JumpTimer = 0;
+            game.DBulletP.Reset();
+            game.EBulletP.Reset();
+        }
+
         public void StartLevel()
         {
+            game.Mode = GameMode.Gameplay;
+
             RestartLevel();
             game.ResetMonsters();
 
@@ -459,17 +522,7 @@ namespace DaveCsharp.Game
                     break;
             }
 
-            game.DaveFire = false;
-            game.DaveJetpack = false;
-            game.Trophy = false;
-            game.ScrollX = 0;
-            game.ViewX = 0;
-            game.Jetpack = 0;
-            game.Gun = false;
-            game.CheckDoor = false;
-            game.LastDir = Direction.Neutral;
-            game.DBulletP.Reset();
-            game.EBulletP.Reset();
+            ResetDave();
         }
 
         private void MoveMonsters()
@@ -524,10 +577,7 @@ namespace DaveCsharp.Game
                 IsClear(game.DaveP.X + 3, game.DaveP.Y + 4)
             );
 
-            Point<byte> grid = new(
-                x: (byte)((game.DaveP.X + 6) / Common.TILE_SIZE),
-                y: (byte)((game.DaveP.Y + 8) / Common.TILE_SIZE)
-            );
+            Point<byte> grid = OnGrid(game.DaveP.X + 6, game.DaveP.Y + 8);
             var type = grid.X < 100 && grid.Y < 10 ? GetGridObject(grid) : Entity.Empty;
             if (type.IsClimbable) game.CanClimb = true;
             else
@@ -541,16 +591,13 @@ namespace DaveCsharp.Game
         private bool IsClear(int px, int py, bool isDave = true) => IsClear((ushort)px, (ushort)py, isDave);
         private bool IsClear(ushort px, ushort py, bool isDave = true)
         {
-            Point<byte> grid = new(
-                x: (byte)(px / Common.TILE_SIZE),
-                y: (byte)(py / Common.TILE_SIZE)
-            );
+            Point<byte> grid = OnGrid(px, py);
             if (grid.X > 99 || grid.Y > 9) return true;
 
             Entity entity;
             try
             {
-                entity = GetGridObject(grid);
+                entity = game.Mode == GameMode.Gameplay ? GetGridObject(grid) : GetTransitionGridObject(grid.X, grid.Y);
             }
             catch (IndexOutOfRangeException)
             {
@@ -565,6 +612,8 @@ namespace DaveCsharp.Game
                 else if (entity.IsPickup) game.CheckPickup = new(grid);
                 else if (entity.IsHazard && !game.DaveDeadTimer.IsActive)
                     game.DaveDeadTimer.Start();
+                else if (game.Mode == GameMode.LevelTransition && grid.X >= 20)
+                    game.NextLevel = true;
             }
 
             return true;
@@ -615,7 +664,7 @@ namespace DaveCsharp.Game
                 game.DaveP.Y = -16;
             }
 
-            if (game.DaveRight)
+            if (game.DaveRight || game.Mode == GameMode.LevelTransition)
             {
                 game.DaveP.X += 2;
                 game.LastDir = Direction.Right;
@@ -727,10 +776,7 @@ namespace DaveCsharp.Game
 
             if (!IsClear(game.DBulletP, isDave: false)) game.DBulletP.Reset();
 
-            Point<byte> grid = new(
-                x: (byte)(game.DBulletP.X / Common.TILE_SIZE),
-                y: (byte)(game.DBulletP.Y / Common.TILE_SIZE)
-            );
+            Point<byte> grid = OnGrid(game.DBulletP);
             if (grid.X - game.ViewX < 1 || grid.X - game.ViewX > 20) game.DBulletP.Reset();
 
             if (game.DBulletP.X != 0)
@@ -760,11 +806,7 @@ namespace DaveCsharp.Game
             {
                 game.EBulletP.X += (ushort)((sbyte)game.EBulletDir * 4);
 
-                Point<byte> grid = new(
-                    x: (byte)(game.EBulletP.X / Common.TILE_SIZE),
-                    y: (byte)(game.EBulletP.Y / Common.TILE_SIZE)
-                );
-
+                Point<byte> grid = OnGrid(game.EBulletP);
                 if (grid.X == game.Dave.X && grid.Y == game.Dave.Y)
                 {
                     game.EBulletP.Reset();

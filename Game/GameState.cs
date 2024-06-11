@@ -113,6 +113,7 @@ namespace DaveCsharp.Game
         public byte JetpackDelay { get; set; }
         public Point<byte> CheckPickup { get; set; } = Point<byte>.Default;
         public bool CheckDoor { get; set; }
+        public bool NextLevel { get; set; }
         public bool CanClimb { get; set; }
         public bool Trophy { get; set; }
         public bool Gun { get; set; }
