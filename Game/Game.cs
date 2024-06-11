@@ -120,14 +120,14 @@ namespace DaveCsharp.Game
                 DrawMap(
                     renderer,
                     assets,
-                    GetGridObject,
+                    (x, y) => GetGridObject((byte)(game.ViewX + x), y),
                     new Point<byte>(x: 20, y: 10)
                 );
             else if (game.Mode == GameMode.Title)
                 DrawMap(
                     renderer,
                     assets,
-                    (x, y) => Entity.GetByType((TileType)game.GetTitleLevelTile(x, y)),
+                    (x, y) => Entity.GetByType(game.GetTitleLevelTile(x, y)),
                     new Point<byte>(x: 10, y: 7),
                     new Point<byte>(x: 5, y: 3)
                 );

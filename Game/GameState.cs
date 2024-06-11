@@ -134,6 +134,6 @@ namespace DaveCsharp.Game
             return Score;
         }
 
-        public readonly byte GetTitleLevelTile(byte x, byte y) => titleLevel[y * 10 + x];
+        public readonly TileType GetTitleLevelTile(byte x, byte y) => (TileType)titleLevel[y * 10 + x];
     }
 }
