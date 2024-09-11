@@ -110,6 +110,7 @@ namespace DaveCsharp.Game
         public bool DaveUp { get; set; }
         public byte JumpTimer { get; set; }
         public DeadTimer DaveDeadTimer { get; set; } = new();
+        public DaveStartTimer DaveStartTimer { get; } = new();
         public byte JetpackDelay { get; set; }
         public Point<byte> CheckPickup { get; set; } = Point<byte>.Default;
         public bool CheckDoor { get; set; }

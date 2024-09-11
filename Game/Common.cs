@@ -39,19 +39,58 @@ namespace DaveCsharp.Game
         public static Point<T> Default => new(default!, default!);
     }
 
-    class DeadTimer
+    /// <summary>
+    /// A counter that can be manually ticked down and is considered to be active if the timer value is higher than zero.
+    /// The timer is considered inactive until the <code>Start()</code> method is called.
+    /// </summary>
+    /// <param name="maxValue">The starting value of the </param>
+    class TickTimer(byte maxValue)
     {
-        private byte value;
-        public void Start() => value = 30;
+        private readonly byte maxValue = maxValue;
+
+        protected byte Value { get; private set;}
+
+        /// <summary>
+        /// Resets the timer's value to the instance's maximum.
+        /// </summary>
+        public void Start() => Value = maxValue;
+        /// <summary>
+        /// Decrements the timer's value.
+        /// </summary>
+        /// <returns>true if the value has reached zero, otherwise false.</returns>
         public bool Tick()
         {
-            if (value > 0)
+            if (Value > 0)
             {
-                value--;
-                if (value == 0) return true;
+                Value--;
+                if (Value == 0) return true;
             }
             return false;
         }
-        public bool IsActive => value > 0;
+        /// <summary>
+        /// A value indicating whether the internal timer has reached zero.
+        /// </summary>
+        public bool IsActive => Value > 0;
+    }
+
+    /// <summary>
+    /// A TickTimer used for the start of the level when Dave is blinking.
+    /// </summary>
+    class DaveStartTimer : TickTimer
+    {
+        public DaveStartTimer() : base(80) {}
+
+        /// <summary>
+        /// Indicates whether Dave should be invisible for the current tick.
+        /// </summary>
+        public bool InvisibleTick => IsActive && (Value / 10 % 2 == 0);
+    }
+
+    /// <summary>
+    /// A TickTimer used for Dave or monsters dying.
+    /// </summary>
+    class DeadTimer : TickTimer
+    {
+        public DeadTimer() : base(30) {}
     }
 }

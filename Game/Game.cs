@@ -158,6 +158,8 @@ namespace DaveCsharp.Game
 
         private void DrawDave(Renderer renderer, GameAssets assets)
         {
+            if (game.Mode == GameMode.Gameplay && game.DaveStartTimer.InvisibleTick) return;
+
             var tileIndex = game.DaveDeadTimer.IsActive ?
                 Entity.Explosion.GetFrame(game.Tick) :
                 Entity.GetDaveFrame(game.DaveTick, new(
@@ -366,6 +368,8 @@ namespace DaveCsharp.Game
         {
             game.Tick++;
 
+            if (game.DaveStartTimer.IsActive) game.DaveStartTimer.Tick();
+
             if (game.Mode == GameMode.LevelTransition)
             {
                 if (game.NextLevel)
@@ -428,6 +432,7 @@ namespace DaveCsharp.Game
             }
 
             game.SetDavePosition();
+            game.DaveStartTimer.Start();
         }
 
         private void ResetDave()
@@ -527,7 +532,8 @@ namespace DaveCsharp.Game
 
         private void MoveMonsters()
         {
-            foreach (var m in game.ActiveMonsters) m.Move(game.SelectedLevel.Path);
+            if (!game.DaveStartTimer.IsActive)
+                foreach (var m in game.ActiveMonsters) m.Move(game.SelectedLevel.Path);
         }
 
         private void FireMonsters()
@@ -547,7 +553,7 @@ namespace DaveCsharp.Game
 
         private void ApplyGravity()
         {
-            if (!game.DaveJump && !game.OnGround && !game.DaveJetpack && !game.DaveClimb)
+            if (!game.DaveJump && !game.OnGround && !game.DaveJetpack && !game.DaveClimb && !game.DaveStartTimer.IsActive)
             {
                 if (IsClear(game.DaveP.X + 4, game.DaveP.Y + 17))
                     game.DaveP.Y += 2;
@@ -623,7 +629,7 @@ namespace DaveCsharp.Game
 
         private void VerifyInput()
         {
-            if (game.DaveDeadTimer.IsActive) return;
+            if (game.DaveDeadTimer.IsActive || game.DaveStartTimer.IsActive) return;
             if (game.TryRight && game.GetCollisionPoint(2) && game.GetCollisionPoint(3))
                 game.DaveRight = true;
             if (game.TryLeft && game.GetCollisionPoint(6) && game.GetCollisionPoint(7))
